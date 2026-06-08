@@ -1,0 +1,24 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV DATA_DIR=/app/data
+ENV PORT=3001
+
+COPY --from=build /app /app
+
+EXPOSE 3001
+
+CMD ["npm", "run", "start"]
+
