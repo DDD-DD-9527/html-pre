@@ -66,5 +66,18 @@ export const useAdminStore = defineStore('admin', {
       await this.refresh()
       return data
     },
+
+    async renameProject(projectId: string, name: string) {
+      const res = await apiFetch<{ success: boolean; project?: { id: string; name: string } }>(
+        `/api/projects/${projectId}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ name }),
+        },
+      )
+      if (!res.success) throw new Error('Rename failed')
+      await this.refresh()
+      return res
+    },
   },
 })

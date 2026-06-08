@@ -36,6 +36,12 @@ const selectedProject = computed(() => {
 
 const selectedRelease = computed(() => selectedProject.value?.currentRelease || null)
 const previewUrl = computed(() => selectedProject.value?.previewUrl || '/preview')
+const downloadUrl = computed(() =>
+  selectedProject.value?.id ? `/api/projects/${selectedProject.value.id}/download` : '',
+)
+
+const renamingProjectId = ref<string | null>(null)
+const renamingProjectName = ref('')
 
 function formatBytes(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB']
@@ -102,6 +108,34 @@ async function copyPreviewLink() {
 
 async function openPreview() {
   window.open(previewUrl.value, '_blank', 'noopener,noreferrer')
+}
+
+function startRename(projectId: string, currentName: string) {
+  renamingProjectId.value = projectId
+  renamingProjectName.value = currentName
+}
+
+function cancelRename() {
+  renamingProjectId.value = null
+  renamingProjectName.value = ''
+}
+
+async function saveRename() {
+  if (!renamingProjectId.value) return
+  message.value = null
+  error.value = null
+  busy.value = true
+  try {
+    const next = renamingProjectName.value.trim()
+    if (!next) throw new Error('项目名不能为空')
+    await admin.renameProject(renamingProjectId.value, next)
+    message.value = '项目名已更新'
+    cancelRename()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '保存失败'
+  } finally {
+    busy.value = false
+  }
 }
 
 async function applyPreviewSetting(nextEnabled: boolean) {
@@ -270,6 +304,16 @@ onMounted(async () => {
                 <ExternalLink class="h-4 w-4" />
                 打开预览
               </button>
+              <a
+                v-if="downloadUrl"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                :href="downloadUrl"
+                target="_blank"
+                rel="noopener"
+              >
+                <ExternalLink class="h-4 w-4" />
+                下载 HTML
+              </a>
             </div>
 
             <div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
@@ -295,7 +339,39 @@ onMounted(async () => {
               :class="p.id === selectedProjectId ? 'bg-blue-50' : 'hover:bg-slate-50'"
               @click="selectedProjectId = p.id"
             >
-              <div class="col-span-4 truncate text-slate-900">{{ p.name }}</div>
+              <div class="col-span-4 truncate text-slate-900">
+                <div
+                  v-if="renamingProjectId !== p.id"
+                  class="truncate"
+                  @click.stop="startRename(p.id, p.name)"
+                >
+                  {{ p.name }}
+                </div>
+                <div v-else class="flex items-center gap-2">
+                  <input
+                    v-model="renamingProjectName"
+                    class="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                    :disabled="busy"
+                    @click.stop
+                    @keydown.enter.prevent="saveRename"
+                    @keydown.esc.prevent="cancelRename"
+                  />
+                  <button
+                    class="rounded-lg bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+                    :disabled="busy"
+                    @click.stop="saveRename"
+                  >
+                    保存
+                  </button>
+                  <button
+                    class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                    :disabled="busy"
+                    @click.stop="cancelRename"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
               <div class="col-span-5 truncate text-slate-600">
                 {{ p.currentRelease ? p.currentRelease.fileName : '未发布' }}
               </div>
