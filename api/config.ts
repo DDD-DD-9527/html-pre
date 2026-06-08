@@ -1,10 +1,16 @@
 import path from 'path'
 
 export function getServerPort(): number {
-  const raw = process.env.PORT
-  const parsed = raw ? Number(raw) : 3001
-  if (!Number.isFinite(parsed) || parsed <= 0) return 3001
-  return parsed
+  const candidates = [process.env.PORT, process.env.WEB_PORT].filter(Boolean) as string[]
+
+  for (const raw of candidates) {
+    const value = raw.trim()
+    if (/^\$\{.+\}$/.test(value)) continue
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+
+  return 3001
 }
 
 export function getDataDir(): string {
