@@ -169,15 +169,20 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-dvh bg-zinc-950 text-zinc-100">
+  <div class="min-h-dvh bg-slate-50 text-slate-900">
     <div class="mx-auto max-w-5xl px-6 py-8">
       <div class="mb-6 flex items-start justify-between gap-4">
         <div>
-          <div class="text-sm text-zinc-400">HTML 预览后台</div>
-          <h1 class="mt-1 text-2xl font-semibold tracking-tight">发布与预览</h1>
+          <div class="flex items-center gap-3">
+            <img alt="html-pre" class="h-9 w-9 rounded-lg border border-slate-200 bg-white object-contain" src="/favicon.png" />
+            <div>
+              <div class="text-sm text-slate-600">html-pre</div>
+              <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">发布与预览</h1>
+            </div>
+          </div>
         </div>
         <button
-          class="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-900/70"
+          class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
           :disabled="busy"
           @click="onLogout"
         >
@@ -187,11 +192,11 @@ onMounted(async () => {
       </div>
 
       <div class="grid gap-4 md:grid-cols-2">
-        <div class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div class="mb-3 flex items-center justify-between">
-            <div class="text-sm font-medium text-zinc-200">上传 HTML</div>
+            <div class="text-sm font-medium text-slate-900">上传 HTML</div>
             <button
-              class="inline-flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               :disabled="busy"
               @click="onPickFile"
             >
@@ -209,27 +214,27 @@ onMounted(async () => {
 
           <div
             class="group flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition"
-            :class="dragging ? 'border-zinc-400 bg-zinc-950/40' : 'border-zinc-800 hover:border-zinc-600'"
+            :class="dragging ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'"
             @click="onPickFile"
             @dragover="onDragOver"
             @dragleave="onDragLeave"
             @drop="onDrop"
           >
-            <div class="text-sm text-zinc-200">拖拽 HTML 到这里发布</div>
-            <div class="mt-1 text-xs text-zinc-500">仅支持 .html/.htm，上传后立即生效</div>
+            <div class="text-sm text-slate-900">拖拽 HTML 到这里发布</div>
+            <div class="mt-1 text-xs text-slate-500">仅支持 .html/.htm，上传后立即生效</div>
           </div>
 
           <div class="mt-4 space-y-2">
-            <div class="text-xs text-zinc-500">项目名（可新建）</div>
+            <div class="text-xs text-slate-500">项目名（可新建）</div>
             <input
               v-model="newProjectName"
-              class="w-full rounded-xl border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm outline-none transition focus:border-zinc-600"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               placeholder="输入新项目名（留空则上传到当前选择项目）"
             />
-            <div class="text-xs text-zinc-500">当前选择</div>
+            <div class="text-xs text-slate-500">当前选择</div>
             <select
               v-model="selectedProjectId"
-              class="w-full rounded-xl border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm outline-none transition focus:border-zinc-600"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
               <option v-for="p in admin.projects" :key="p.id" :value="p.id">
                 {{ p.name }}
@@ -238,19 +243,19 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-          <div class="mb-3 text-sm font-medium text-zinc-200">当前发布</div>
-          <div v-if="admin.loading" class="text-sm text-zinc-400">加载中…</div>
-          <div v-else-if="!selectedRelease" class="text-sm text-zinc-400">暂无已发布 HTML</div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="mb-3 text-sm font-medium text-slate-900">当前发布</div>
+          <div v-if="admin.loading" class="text-sm text-slate-600">加载中…</div>
+          <div v-else-if="!selectedRelease" class="text-sm text-slate-600">暂无已发布 HTML</div>
           <div v-else class="space-y-2">
-            <div class="text-sm text-zinc-200">{{ selectedRelease.fileName }}</div>
-            <div class="text-xs text-zinc-500">
+            <div class="text-sm text-slate-900">{{ selectedRelease.fileName }}</div>
+            <div class="text-xs text-slate-500">
               {{ formatBytes(selectedRelease.size) }} · {{ new Date(selectedRelease.uploadedAt).toLocaleString() }}
             </div>
 
             <div class="mt-4 flex flex-wrap gap-2">
               <button
-                class="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/20 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-950/40"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
                 :disabled="busy"
                 @click="copyPreviewLink"
               >
@@ -258,7 +263,7 @@ onMounted(async () => {
                 复制链接
               </button>
               <button
-                class="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/20 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-950/40"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
                 :disabled="busy"
                 @click="openPreview"
               >
@@ -267,18 +272,18 @@ onMounted(async () => {
               </button>
             </div>
 
-            <div class="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/20 px-3 py-2 text-xs text-zinc-300">
+            <div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
               {{ origin }}{{ previewUrl }}
             </div>
           </div>
         </div>
 
-        <div class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 md:col-span-2">
-          <div class="mb-3 text-sm font-medium text-zinc-200">项目列表</div>
-          <div v-if="admin.loading" class="text-sm text-zinc-400">加载中…</div>
-          <div v-else-if="admin.projects.length === 0" class="text-sm text-zinc-400">暂无项目</div>
-          <div v-else class="overflow-hidden rounded-xl border border-zinc-800">
-            <div class="grid grid-cols-12 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-400">
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
+          <div class="mb-3 text-sm font-medium text-slate-900">项目列表</div>
+          <div v-if="admin.loading" class="text-sm text-slate-600">加载中…</div>
+          <div v-else-if="admin.projects.length === 0" class="text-sm text-slate-600">暂无项目</div>
+          <div v-else class="overflow-hidden rounded-xl border border-slate-200">
+            <div class="grid grid-cols-12 bg-slate-50 px-3 py-2 text-xs text-slate-500">
               <div class="col-span-4">项目名</div>
               <div class="col-span-5">当前文件</div>
               <div class="col-span-3 text-right">操作</div>
@@ -286,16 +291,16 @@ onMounted(async () => {
             <button
               v-for="p in admin.projects"
               :key="p.id"
-              class="grid w-full grid-cols-12 items-center px-3 py-2 text-left text-sm transition hover:bg-zinc-950/30"
-              :class="p.id === selectedProjectId ? 'bg-zinc-950/30' : ''"
+              class="grid w-full grid-cols-12 items-center px-3 py-2 text-left text-sm transition"
+              :class="p.id === selectedProjectId ? 'bg-blue-50' : 'hover:bg-slate-50'"
               @click="selectedProjectId = p.id"
             >
-              <div class="col-span-4 truncate text-zinc-200">{{ p.name }}</div>
-              <div class="col-span-5 truncate text-zinc-400">
+              <div class="col-span-4 truncate text-slate-900">{{ p.name }}</div>
+              <div class="col-span-5 truncate text-slate-600">
                 {{ p.currentRelease ? p.currentRelease.fileName : '未发布' }}
               </div>
               <div class="col-span-3 flex justify-end gap-2">
-                <span class="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950/20 px-2 py-1 text-xs text-zinc-200">
+                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700">
                   {{ p.previewUrl }}
                 </span>
               </div>
@@ -303,25 +308,25 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 md:col-span-2">
-          <div class="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-200">
-            <Shield class="h-4 w-4 text-zinc-300" />
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
+          <div class="mb-3 flex items-center gap-2 text-sm font-medium text-slate-900">
+            <Shield class="h-4 w-4 text-slate-600" />
             预览访问控制
           </div>
 
           <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <div class="text-sm text-zinc-200">
+              <div class="text-sm text-slate-900">
                 当前：{{ admin.previewEnabled ? '需访问码' : '公开预览' }}
               </div>
-              <div class="mt-1 text-xs text-zinc-500">
+              <div class="mt-1 text-xs text-slate-500">
                 开启后，客户访问预览链接会先输入访问码；关闭后可直接预览。
               </div>
             </div>
 
             <button
               class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60"
-              :class="admin.previewEnabled ? 'bg-zinc-100 text-zinc-950 hover:bg-white' : 'bg-zinc-100 text-zinc-950 hover:bg-white'"
+              :class="admin.previewEnabled ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-blue-600 text-white hover:bg-blue-700'"
               :disabled="busy"
               @click="applyPreviewSetting(!admin.previewEnabled)"
             >
@@ -332,11 +337,11 @@ onMounted(async () => {
           <div class="mt-4 grid gap-2 md:grid-cols-3">
             <input
               v-model="accessCode"
-              class="w-full rounded-xl border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-sm outline-none transition focus:border-zinc-600 md:col-span-2"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 md:col-span-2"
               placeholder="设置/更新访问码（开启访问码时必填）"
             />
             <button
-              class="w-full rounded-xl border border-zinc-800 bg-zinc-950/20 px-4 py-2 text-sm text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-950/40 disabled:cursor-not-allowed disabled:opacity-60"
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               :disabled="busy || !admin.previewEnabled"
               @click="updateAccessCode"
             >
@@ -346,10 +351,10 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-if="message" class="mt-4 rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">
+      <div v-if="message" class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
         {{ message }}
       </div>
-      <div v-if="error" class="mt-4 rounded-xl border border-red-900/40 bg-red-950/20 px-3 py-2 text-sm text-red-100">
+      <div v-if="error" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
         {{ error }}
       </div>
     </div>
