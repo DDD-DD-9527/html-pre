@@ -2,13 +2,14 @@
  * local server entry file, for local development
  */
 import app from './app.js';
+import { getServerPort } from './config.js';
 
 /**
  * start server with port
  */
-const PORT = process.env.PORT || 3001;
+const PORT = getServerPort();
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server ready on port ${PORT}`);
 });
 
