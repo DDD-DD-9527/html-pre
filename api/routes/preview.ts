@@ -1,12 +1,16 @@
 import { Router, type Request, type Response } from 'express'
-import { loadState } from '../state.js'
+import { findProjectById, getDefaultProject, loadState } from '../state.js'
 import { hashSecret, timingSafeEqualBase64 } from '../utils/crypto.js'
+import { createPreviewTicket } from '../preview-ticket.js'
 
 const router = Router()
 
 router.get('/config', async (req: Request, res: Response): Promise<void> => {
   const state = await loadState()
-  res.status(200).json({ enabled: Boolean(state.preview.enabled) })
+  const raw = req.query?.projectId
+  const projectId = typeof raw === 'string' && raw.length > 0 ? raw : undefined
+  const project = projectId ? findProjectById(state, projectId) : getDefaultProject(state)
+  res.status(200).json({ enabled: Boolean(project?.preview?.enabled) })
 })
 
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
@@ -17,26 +21,34 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 
   const state = await loadState()
-  if (!state.preview.enabled) {
-    req.session.preview = true
-    res.status(200).json({ success: true })
+  const rawProjectId = req.query?.projectId
+  const projectId = typeof rawProjectId === 'string' && rawProjectId.length > 0 ? rawProjectId : undefined
+  const project = projectId ? findProjectById(state, projectId) : getDefaultProject(state)
+
+  if (!project) {
+    res.status(404).json({ success: false })
     return
   }
 
-  if (!state.preview.accessCodeSalt || !state.preview.accessCodeHash) {
+  const enabled = Boolean(project.preview?.enabled)
+  if (!enabled) {
+    res.status(200).json({ success: true, ticket: null })
+    return
+  }
+
+  if (!project.preview?.accessCodeSalt || !project.preview?.accessCodeHash) {
     res.status(500).json({ success: false })
     return
   }
 
-  const nextHash = hashSecret(accessCode, state.preview.accessCodeSalt)
-  if (!timingSafeEqualBase64(nextHash, state.preview.accessCodeHash)) {
+  const nextHash = hashSecret(accessCode, project.preview.accessCodeSalt)
+  if (!timingSafeEqualBase64(nextHash, project.preview.accessCodeHash)) {
     res.status(401).json({ success: false })
     return
   }
 
-  req.session.preview = true
-  res.status(200).json({ success: true })
+  const ticket = createPreviewTicket(project.id)
+  res.status(200).json({ success: true, ticket })
 })
 
 export default router
-

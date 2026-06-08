@@ -35,9 +35,8 @@ router.put('/preview', requireAdmin, async (req: Request, res: Response): Promis
   }
 
   await saveState(next)
-  req.session.preview = false
+  req.session.previewProjects = {}
   res.status(200).json({ success: true })
 })
 
 export default router
-

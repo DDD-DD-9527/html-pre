@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  Eye,
+  EyeOff,
   ExternalLink,
   Link as LinkIcon,
   LogOut,
@@ -25,6 +27,7 @@ const accessCode = ref('')
 const selectedProjectId = ref<string>('')
 const newProjectName = ref('')
 const releaseNote = ref('')
+const uploadMode = ref<'existing' | 'new'>('existing')
 
 const origin = window.location.origin
 
@@ -40,9 +43,14 @@ const previewUrl = computed(() => selectedProject.value?.previewUrl || '/preview
 const downloadUrl = computed(() =>
   selectedProject.value?.id ? `/api/projects/${selectedProject.value.id}/download` : '',
 )
+const selectedPreviewEnabled = computed(() => Boolean(selectedProject.value?.previewEnabled))
 
 const renamingProjectId = ref<string | null>(null)
 const renamingProjectName = ref('')
+
+const accessCodeLoadingProjectId = ref<string | null>(null)
+const accessCodeByProjectId = ref<Record<string, string | null>>({})
+const accessCodeVisible = ref<Record<string, boolean>>({})
 
 const releasesDrawerOpen = ref(false)
 const releasesLoading = ref(false)
@@ -91,11 +99,24 @@ async function upload(file: File) {
     if (!file.name.toLowerCase().endsWith('.html') && !file.name.toLowerCase().endsWith('.htm')) {
       throw new Error('仅支持 .html/.htm 文件')
     }
-    const projectName =
-      newProjectName.value.trim().length > 0
-        ? newProjectName.value.trim()
-        : selectedProject.value?.name || '默认项目'
-    const result = await admin.uploadHtml(file, projectName, releaseNote.value)
+    const note = releaseNote.value
+    const isNew = uploadMode.value === 'new'
+    const result = isNew
+      ? await (async () => {
+          const name = newProjectName.value.trim()
+          if (!name) throw new Error('请输入新项目名')
+          const exists = admin.projects.some((p) => p.name === name)
+          if (exists) {
+            const ok = window.confirm(`项目「${name}」已存在，继续将覆盖其当前版本。是否继续？`)
+            if (!ok) throw new Error('已取消')
+          }
+          return await admin.uploadHtml(file, { projectName: name, releaseNote: note })
+        })()
+      : await (async () => {
+          const projectId = selectedProject.value?.id
+          if (!projectId) throw new Error('请选择要上传的项目')
+          return await admin.uploadHtml(file, { projectId, releaseNote: note })
+        })()
     if (result.project?.id) {
       selectedProjectId.value = result.project.id
     }
@@ -103,6 +124,7 @@ async function upload(file: File) {
     releaseNote.value = ''
     message.value = '上传成功，已发布为当前预览版本'
   } catch (e) {
+    if (e instanceof Error && e.message === '已取消') return
     error.value = e instanceof Error ? e.message : '上传失败'
   } finally {
     busy.value = false
@@ -171,13 +193,14 @@ async function applyPreviewSetting(nextEnabled: boolean) {
   error.value = null
   busy.value = true
   try {
+    const projectId = selectedProject.value?.id
+    if (!projectId) throw new Error('请选择项目')
     if (nextEnabled) {
       const code = accessCode.value.trim()
-      if (!code) throw new Error('开启访问码模式需要先设置访问码')
-      await admin.setPreviewConfig(true, code)
+      await admin.setProjectPreviewConfig(projectId, true, code.length > 0 ? code : undefined)
       message.value = '已开启访问码模式'
     } else {
-      await admin.setPreviewConfig(false)
+      await admin.setProjectPreviewConfig(projectId, false)
       message.value = '已切换为公开预览'
     }
     accessCode.value = ''
@@ -193,9 +216,11 @@ async function updateAccessCode() {
   error.value = null
   busy.value = true
   try {
+    const projectId = selectedProject.value?.id
+    if (!projectId) throw new Error('请选择项目')
     const code = accessCode.value.trim()
     if (!code) throw new Error('请输入新的访问码')
-    await admin.setPreviewConfig(true, code)
+    await admin.setProjectPreviewConfig(projectId, true, code)
     accessCode.value = ''
     message.value = '访问码已更新'
   } catch (e) {
@@ -203,6 +228,23 @@ async function updateAccessCode() {
   } finally {
     busy.value = false
   }
+}
+
+async function toggleAccessCode(projectId: string) {
+  if (accessCodeVisible.value[projectId]) {
+    accessCodeVisible.value = { ...accessCodeVisible.value, [projectId]: false }
+    return
+  }
+  if (!(projectId in accessCodeByProjectId.value)) {
+    accessCodeLoadingProjectId.value = projectId
+    try {
+      const code = await admin.getProjectAccessCode(projectId)
+      accessCodeByProjectId.value = { ...accessCodeByProjectId.value, [projectId]: code }
+    } finally {
+      accessCodeLoadingProjectId.value = null
+    }
+  }
+  accessCodeVisible.value = { ...accessCodeVisible.value, [projectId]: true }
 }
 
 function onDragOver(e: DragEvent) {
@@ -226,6 +268,13 @@ onMounted(async () => {
   await refreshAll()
   if (!selectedProjectId.value && admin.projects[0]?.id) {
     selectedProjectId.value = admin.projects[0].id
+  }
+  uploadMode.value = admin.projects.length > 0 ? 'existing' : 'new'
+})
+
+watch(selectedProjectId, () => {
+  if (uploadMode.value === 'existing') {
+    newProjectName.value = ''
   }
 })
 </script>
@@ -287,12 +336,50 @@ onMounted(async () => {
           </div>
 
           <div class="mt-4 space-y-2">
-            <div class="text-xs text-slate-500">项目名（可新建）</div>
-            <input
-              v-model="newProjectName"
-              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-              placeholder="输入新项目名（留空则上传到当前选择项目）"
-            />
+            <div class="text-xs text-slate-500">上传目标</div>
+            <div class="flex gap-2">
+              <button
+                class="flex-1 rounded-xl border px-3 py-2 text-sm transition"
+                :class="uploadMode === 'existing' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                type="button"
+                @click="
+                  uploadMode = 'existing'
+                  newProjectName = ''
+                "
+              >
+                已有项目
+              </button>
+              <button
+                class="flex-1 rounded-xl border px-3 py-2 text-sm transition"
+                :class="uploadMode === 'new' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                type="button"
+                @click="uploadMode = 'new'"
+              >
+                新建项目
+              </button>
+            </div>
+
+            <div v-if="uploadMode === 'new'">
+              <div class="mt-2 text-xs text-slate-500">新项目名</div>
+              <input
+                v-model="newProjectName"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                placeholder="请输入新项目名"
+              />
+            </div>
+
+            <div v-else>
+              <div class="mt-2 text-xs text-slate-500">选择已有项目</div>
+              <select
+                v-model="selectedProjectId"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              >
+                <option v-for="p in admin.projects" :key="p.id" :value="p.id">
+                  {{ p.name }}
+                </option>
+              </select>
+            </div>
+
             <div class="text-xs text-slate-500">版本备注/更新说明（可选）</div>
             <textarea
               v-model="releaseNote"
@@ -300,15 +387,6 @@ onMounted(async () => {
               rows="3"
               placeholder="例如：修复登录页、增加项目列表、优化样式"
             />
-            <div class="text-xs text-slate-500">当前选择</div>
-            <select
-              v-model="selectedProjectId"
-              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-            >
-              <option v-for="p in admin.projects" :key="p.id" :value="p.id">
-                {{ p.name }}
-              </option>
-            </select>
           </div>
         </div>
 
@@ -375,8 +453,9 @@ onMounted(async () => {
           <div v-else class="overflow-hidden rounded-xl border border-slate-200">
             <div class="grid grid-cols-12 bg-slate-50 px-3 py-2 text-xs text-slate-500">
               <div class="col-span-4">项目名</div>
-              <div class="col-span-5">当前文件</div>
-              <div class="col-span-3 text-right">操作</div>
+              <div class="col-span-4">当前文件</div>
+              <div class="col-span-2">访问码</div>
+              <div class="col-span-2 text-right">操作</div>
             </div>
             <button
               v-for="p in admin.projects"
@@ -418,10 +497,40 @@ onMounted(async () => {
                   </button>
                 </div>
               </div>
-              <div class="col-span-5 truncate text-slate-600">
+              <div class="col-span-4 truncate text-slate-600">
                 {{ p.currentRelease ? p.currentRelease.fileName : '未发布' }}
               </div>
-              <div class="col-span-3 flex justify-end gap-2">
+              <div class="col-span-2">
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="p.previewEnabled"
+                    class="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700"
+                  >
+                    需访问码
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
+                  >
+                    公开
+                  </span>
+
+                  <button
+                    v-if="p.previewHasAccessCode"
+                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                    :disabled="busy || accessCodeLoadingProjectId === p.id"
+                    type="button"
+                    @click.stop="toggleAccessCode(p.id)"
+                  >
+                    <EyeOff v-if="!accessCodeVisible[p.id]" class="h-3.5 w-3.5" />
+                    <Eye v-else class="h-3.5 w-3.5" />
+                    <span v-if="accessCodeLoadingProjectId === p.id">加载中</span>
+                    <span v-else-if="accessCodeVisible[p.id]">{{ accessCodeByProjectId[p.id] || '未设置' }}</span>
+                    <span v-else>查看</span>
+                  </button>
+                </div>
+              </div>
+              <div class="col-span-2 flex justify-end gap-2">
                 <span class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700">
                   {{ p.previewUrl }}
                 </span>
@@ -439,7 +548,7 @@ onMounted(async () => {
           <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <div class="text-sm text-slate-900">
-                当前：{{ admin.previewEnabled ? '需访问码' : '公开预览' }}
+                当前项目：{{ selectedPreviewEnabled ? '需访问码' : '公开预览' }}
               </div>
               <div class="mt-1 text-xs text-slate-500">
                 开启后，客户访问预览链接会先输入访问码；关闭后可直接预览。
@@ -448,11 +557,11 @@ onMounted(async () => {
 
             <button
               class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60"
-              :class="admin.previewEnabled ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-blue-600 text-white hover:bg-blue-700'"
-              :disabled="busy"
-              @click="applyPreviewSetting(!admin.previewEnabled)"
+              :class="selectedPreviewEnabled ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-blue-600 text-white hover:bg-blue-700'"
+              :disabled="busy || !selectedProject?.id"
+              @click="applyPreviewSetting(!selectedPreviewEnabled)"
             >
-              {{ admin.previewEnabled ? '切换为公开预览' : '开启访问码' }}
+              {{ selectedPreviewEnabled ? '切换为公开预览' : '开启访问码' }}
             </button>
           </div>
 
@@ -464,7 +573,7 @@ onMounted(async () => {
             />
             <button
               class="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="busy || !admin.previewEnabled"
+              :disabled="busy || !selectedPreviewEnabled || !selectedProject?.id"
               @click="updateAccessCode"
             >
               更新访问码

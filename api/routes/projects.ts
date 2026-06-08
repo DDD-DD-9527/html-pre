@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAdmin } from '../middleware/auth.js'
+import { getSessionSecret } from '../config.js'
 import { findProjectById, getCurrentRelease, loadState, saveState } from '../state.js'
+import { createSalt, decryptString, encryptString, hashSecret } from '../utils/crypto.js'
 
 const router = Router()
 
@@ -15,6 +17,8 @@ router.get('/', requireAdmin, async (req: Request, res: Response): Promise<void>
         id: p.id,
         name: p.name,
         updatedAt: p.updatedAt,
+        previewEnabled: Boolean(p.preview?.enabled),
+        previewHasAccessCode: Boolean(p.preview?.accessCodeHash),
         currentRelease: current
           ? {
               id: current.id,
@@ -29,6 +33,88 @@ router.get('/', requireAdmin, async (req: Request, res: Response): Promise<void>
     })
 
   res.status(200).json({ projects })
+})
+
+router.get('/:projectId/preview', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  const state = await loadState()
+  const project = findProjectById(state, req.params.projectId)
+  if (!project) {
+    res.status(404).json({ success: false })
+    return
+  }
+  res.status(200).json({ enabled: Boolean(project.preview?.enabled) })
+})
+
+router.get(
+  '/:projectId/preview/access-code',
+  requireAdmin,
+  async (req: Request, res: Response): Promise<void> => {
+    const state = await loadState()
+    const project = findProjectById(state, req.params.projectId)
+    if (!project) {
+      res.status(404).json({ success: false })
+      return
+    }
+
+    const enc = project.preview?.accessCodeEnc
+    if (!enc) {
+      res.status(200).json({ success: true, accessCode: null })
+      return
+    }
+
+    try {
+      const accessCode = decryptString(enc, getSessionSecret())
+      res.status(200).json({ success: true, accessCode })
+    } catch {
+      res.status(200).json({ success: true, accessCode: null })
+    }
+  },
+)
+
+router.put('/:projectId/preview', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  const { enabled, accessCode } = req.body ?? {}
+  if (typeof enabled !== 'boolean' && typeof enabled !== 'undefined') {
+    res.status(400).json({ success: false })
+    return
+  }
+
+  const state = await loadState()
+  const project = findProjectById(state, req.params.projectId)
+  if (!project) {
+    res.status(404).json({ success: false })
+    return
+  }
+
+  const nextEnabled = typeof accessCode === 'string' && accessCode.trim().length > 0 ? true : enabled
+
+  const nextProject = {
+    ...project,
+    preview: {
+      ...(project.preview || {}),
+      enabled: typeof nextEnabled === 'boolean' ? nextEnabled : Boolean(project.preview?.enabled),
+    },
+  }
+
+  if (typeof accessCode === 'string' && accessCode.trim().length > 0) {
+    const salt = createSalt()
+    const code = accessCode.trim()
+    nextProject.preview.accessCodeSalt = salt
+    nextProject.preview.accessCodeHash = hashSecret(code, salt)
+    nextProject.preview.accessCodeEnc = encryptString(code, getSessionSecret())
+  }
+
+  if (
+    nextProject.preview.enabled &&
+    (!nextProject.preview.accessCodeSalt || !nextProject.preview.accessCodeHash)
+  ) {
+    res.status(400).json({ success: false })
+    return
+  }
+
+  const nextProjects = state.projects.map((p) => (p.id === project.id ? nextProject : p))
+  await saveState({ ...state, projects: nextProjects })
+  req.session.previewProjects = {}
+  res.status(200).json({ success: true, enabled: Boolean(nextProject.preview.enabled) })
 })
 
 router.get('/:projectId/download', requireAdmin, async (req: Request, res: Response): Promise<void> => {

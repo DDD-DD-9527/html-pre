@@ -23,6 +23,13 @@ export type Release = {
   note?: string
 }
 
+export type ProjectPreviewSettings = {
+  enabled: boolean
+  accessCodeSalt?: string
+  accessCodeHash?: string
+  accessCodeEnc?: string
+}
+
 export type Project = {
   id: string
   name: string
@@ -30,6 +37,7 @@ export type Project = {
   updatedAt: string
   nextVersion: number
   releases: Release[]
+  preview?: ProjectPreviewSettings
 }
 
 export type PreviewSettings = {
@@ -95,6 +103,26 @@ export async function loadState(): Promise<AppState> {
         let nextVersion = typeof (p as Project).nextVersion === 'number' ? (p as Project).nextVersion : 1
         if (!Number.isFinite(nextVersion) || nextVersion <= 0) nextVersion = 1
 
+        const previewRaw = (p as Project).preview
+        const preview =
+          previewRaw && typeof previewRaw === 'object'
+            ? {
+                enabled: Boolean((previewRaw as ProjectPreviewSettings).enabled),
+                accessCodeSalt:
+                  typeof (previewRaw as ProjectPreviewSettings).accessCodeSalt === 'string'
+                    ? (previewRaw as ProjectPreviewSettings).accessCodeSalt
+                    : undefined,
+                accessCodeHash:
+                  typeof (previewRaw as ProjectPreviewSettings).accessCodeHash === 'string'
+                    ? (previewRaw as ProjectPreviewSettings).accessCodeHash
+                    : undefined,
+                accessCodeEnc:
+                  typeof (previewRaw as ProjectPreviewSettings).accessCodeEnc === 'string'
+                    ? (previewRaw as ProjectPreviewSettings).accessCodeEnc
+                    : undefined,
+              }
+            : undefined
+
         if (releases.some((r) => r.version === 0)) {
           const sorted = releases
             .slice()
@@ -127,12 +155,25 @@ export async function loadState(): Promise<AppState> {
           migrated = true
         }
 
+        if (!preview && parsed.preview && typeof parsed.preview === 'object') {
+          const global = parsed.preview as PreviewSettings
+          if (typeof global.enabled === 'boolean' && global.enabled) {
+            const salt = typeof global.accessCodeSalt === 'string' ? global.accessCodeSalt : undefined
+            const hash = typeof global.accessCodeHash === 'string' ? global.accessCodeHash : undefined
+            if (salt && hash) {
+              migrated = true
+              ;(p as Project).preview = { enabled: true, accessCodeSalt: salt, accessCodeHash: hash }
+            }
+          }
+        }
+
         if (typeof (p as Project).nextVersion !== 'number') migrated = true
 
         return {
           ...p,
           nextVersion,
           releases,
+          preview: (p as Project).preview ?? preview,
         }
       })
 

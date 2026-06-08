@@ -13,12 +13,28 @@ const error = ref<string | null>(null)
 
 function getRedirectTarget() {
   const raw = route.query.redirect
-  if (typeof raw === 'string' && raw.startsWith('/preview')) return raw
+  if (typeof raw === 'string') {
+    if (raw.startsWith('/preview')) return raw
+    try {
+      const decoded = decodeURIComponent(raw)
+      if (decoded.startsWith('/preview')) return decoded
+    } catch {
+      return '/preview'
+    }
+  }
   return '/preview'
 }
 
+function getProjectId() {
+  const raw = route.query.projectId
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw.trim()
+  return null
+}
+
 async function refresh() {
-  const cfg = await apiFetch<{ enabled: boolean }>('/api/preview/config', {
+  const projectId = getProjectId()
+  const url = projectId ? `/api/preview/config?projectId=${encodeURIComponent(projectId)}` : '/api/preview/config'
+  const cfg = await apiFetch<{ enabled: boolean }>(url, {
     headers: {},
   })
   enabled.value = Boolean(cfg.enabled)
@@ -31,11 +47,20 @@ async function onSubmit() {
   error.value = null
   submitting.value = true
   try {
-    await apiFetch<{ success: boolean }>('/api/preview/login', {
+    const projectId = getProjectId()
+    const url = projectId ? `/api/preview/login?projectId=${encodeURIComponent(projectId)}` : '/api/preview/login'
+    const result = await apiFetch<{ success: boolean; ticket: string | null }>(url, {
       method: 'POST',
       body: JSON.stringify({ accessCode: accessCode.value }),
     })
-    window.location.href = getRedirectTarget()
+    const target = getRedirectTarget()
+    if (result.ticket) {
+      const next = new URL(target, window.location.origin)
+      next.searchParams.set('ticket', result.ticket)
+      window.location.href = `${next.pathname}${next.search}${next.hash}`
+      return
+    }
+    window.location.href = target
   } catch {
     error.value = '访问码不正确'
   } finally {

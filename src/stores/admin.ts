@@ -14,6 +14,8 @@ export type ProjectSummary = {
   id: string
   name: string
   updatedAt: string
+  previewEnabled: boolean
+  previewHasAccessCode: boolean
   currentRelease: Omit<CurrentRelease, 'previewUrl'> | null
   previewUrl: string
 }
@@ -33,38 +35,46 @@ export type ReleaseSummary = {
 export const useAdminStore = defineStore('admin', {
   state: () => ({
     projects: [] as ProjectSummary[],
-    previewEnabled: false,
     loading: false,
   }),
   actions: {
     async refresh() {
       this.loading = true
       try {
-        const [projectsRes, preview] = await Promise.all([
-          apiFetch<{ projects: ProjectSummary[] }>('/api/projects'),
-          apiFetch<{ enabled: boolean }>('/api/settings/preview'),
-        ])
+        const projectsRes = await apiFetch<{ projects: ProjectSummary[] }>('/api/projects')
         this.projects = projectsRes.projects
-        this.previewEnabled = Boolean(preview.enabled)
       } finally {
         this.loading = false
       }
     },
-    async setPreviewConfig(enabled: boolean, accessCode?: string) {
-      await apiFetch<{ success: boolean }>('/api/settings/preview', {
+    async getProjectAccessCode(projectId: string) {
+      const res = await apiFetch<{ success: boolean; accessCode: string | null }>(
+        `/api/projects/${projectId}/preview/access-code`,
+      )
+      if (!res.success) throw new Error('Load access code failed')
+      return res.accessCode
+    },
+    async setProjectPreviewConfig(projectId: string, enabled: boolean, accessCode?: string) {
+      await apiFetch<{ success: boolean }>(`/api/projects/${projectId}/preview`, {
         method: 'PUT',
         body: JSON.stringify({ enabled, accessCode }),
       })
       await this.refresh()
     },
-    async uploadHtml(file: File, projectName?: string, releaseNote?: string) {
+    async uploadHtml(
+      file: File,
+      opts?: { projectId?: string; projectName?: string; releaseNote?: string },
+    ) {
       const form = new FormData()
       form.append('file', file)
-      if (projectName && projectName.trim().length > 0) {
-        form.append('projectName', projectName.trim())
+      if (opts?.projectId && opts.projectId.trim().length > 0) {
+        form.append('projectId', opts.projectId.trim())
       }
-      if (releaseNote && releaseNote.trim().length > 0) {
-        form.append('releaseNote', releaseNote.trim())
+      if (opts?.projectName && opts.projectName.trim().length > 0) {
+        form.append('projectName', opts.projectName.trim())
+      }
+      if (opts?.releaseNote && opts.releaseNote.trim().length > 0) {
+        form.append('releaseNote', opts.releaseNote.trim())
       }
       const res = await fetch('/api/releases/upload', {
         method: 'POST',

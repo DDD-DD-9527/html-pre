@@ -79,6 +79,12 @@ router.post(
       return
     }
 
+    const incomingProjectIdRaw = req.body?.projectId
+    const incomingProjectId =
+      typeof incomingProjectIdRaw === 'string' && incomingProjectIdRaw.trim().length > 0
+        ? incomingProjectIdRaw.trim()
+        : undefined
+
     const incomingProjectNameRaw = req.body?.projectName
     const incomingProjectName =
       typeof incomingProjectNameRaw === 'string' && incomingProjectNameRaw.trim().length > 0
@@ -95,17 +101,23 @@ router.post(
 
     const now = new Date().toISOString()
     const state = await loadState()
-    const existing = state.projects.find((p) => p.name === incomingProjectName)
+    const existing = incomingProjectId
+      ? state.projects.find((p) => p.id === incomingProjectId)
+      : state.projects.find((p) => p.name === incomingProjectName)
     const maxReleases = getMaxReleasesPerProject()
 
     const rawNote = req.body?.releaseNote
     const note = typeof rawNote === 'string' && rawNote.trim().length > 0 ? rawNote.trim() : undefined
 
+    if (incomingProjectId && !existing) {
+      res.status(404).json({ success: false, message: 'Project not found' })
+      return
+    }
+
     const project: Project = existing
-      ? {
-          ...existing,
-          name: incomingProjectName,
-        }
+      ? incomingProjectId
+        ? { ...existing }
+        : { ...existing, name: incomingProjectName }
       : {
           id: crypto.randomUUID(),
           name: incomingProjectName,

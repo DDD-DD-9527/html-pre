@@ -5,7 +5,6 @@ declare module 'express-session' {
     admin?: {
       username: string
     }
-    preview?: boolean
+    previewProjects?: Record<string, string>
   }
 }
-
