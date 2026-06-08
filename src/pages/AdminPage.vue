@@ -342,10 +342,7 @@ watch(selectedProjectId, () => {
                 class="flex-1 rounded-xl border px-3 py-2 text-sm transition"
                 :class="uploadMode === 'existing' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
                 type="button"
-                @click="
-                  uploadMode = 'existing'
-                  newProjectName = ''
-                "
+                @click="uploadMode = 'existing'; newProjectName = ''"
               >
                 已有项目
               </button>
