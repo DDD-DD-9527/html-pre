@@ -18,6 +18,7 @@ router.get('/', requireAdmin, async (req: Request, res: Response): Promise<void>
         currentRelease: current
           ? {
               id: current.id,
+              versionLabel: current.versionLabel,
               fileName: current.fileName,
               size: current.size,
               uploadedAt: current.uploadedAt,
@@ -44,7 +45,9 @@ router.get('/:projectId/download', requireAdmin, async (req: Request, res: Respo
     return
   }
 
-  const encoded = encodeURIComponent(current.fileName)
+  const safeName = current.fileName.replace(/\.(html|htm)$/i, '')
+  const filename = `${safeName}-${current.versionLabel}.html`
+  const encoded = encodeURIComponent(filename)
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encoded}`)
   res.type('html')
   res.status(200).sendFile(current.storagePath)
@@ -67,10 +70,12 @@ router.get(
       .map((r) => ({
         id: r.id,
         version: r.version,
+        versionLabel: r.versionLabel,
         fileName: r.fileName,
         size: r.size,
         uploadedAt: r.uploadedAt,
         isCurrent: r.isCurrent,
+        note: r.note,
         downloadUrl: `/api/projects/${project.id}/releases/${r.id}/download`,
       }))
 
@@ -100,7 +105,7 @@ router.get(
     }
 
     const safeName = release.fileName.replace(/\.(html|htm)$/i, '')
-    const filename = `${safeName}-v${release.version}.html`
+    const filename = `${safeName}-${release.versionLabel}.html`
     const encoded = encodeURIComponent(filename)
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encoded}`)
     res.type('html')

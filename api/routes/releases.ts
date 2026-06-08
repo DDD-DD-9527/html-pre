@@ -17,6 +17,25 @@ import {
 
 const router = Router()
 
+function formatDateLabel(date: Date): string {
+  const y = String(date.getFullYear())
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}.${m}.${d}`
+}
+
+function parseVersionLabel(label: string): { date: string; seq: number } | null {
+  const m = /^(\d{4}\.\d{2}\.\d{2})-(\d{2,})$/.exec(label)
+  if (!m) return null
+  const seq = Number(m[2])
+  if (!Number.isFinite(seq) || seq <= 0) return null
+  return { date: m[1], seq }
+}
+
+function buildVersionLabel(dateLabel: string, seq: number): string {
+  return `${dateLabel}-${String(seq).padStart(2, '0')}`
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: getMaxUploadBytes() },
@@ -79,6 +98,9 @@ router.post(
     const existing = state.projects.find((p) => p.name === incomingProjectName)
     const maxReleases = getMaxReleasesPerProject()
 
+    const rawNote = req.body?.releaseNote
+    const note = typeof rawNote === 'string' && rawNote.trim().length > 0 ? rawNote.trim() : undefined
+
     const project: Project = existing
       ? {
           ...existing,
@@ -94,14 +116,23 @@ router.post(
         }
 
     const version = Number.isFinite(project.nextVersion) && project.nextVersion > 0 ? project.nextVersion : 1
+    const dateLabel = formatDateLabel(new Date(now))
+    const maxSeqForDate = project.releases.reduce((acc, r) => {
+      const parsed = typeof r.versionLabel === 'string' ? parseVersionLabel(r.versionLabel) : null
+      if (!parsed || parsed.date !== dateLabel) return acc
+      return Math.max(acc, parsed.seq)
+    }, 0)
+    const versionLabel = buildVersionLabel(dateLabel, maxSeqForDate + 1)
     const nextRelease: Release = {
       id,
       version,
+      versionLabel,
       fileName: path.basename(decodedOriginalName),
       size: file.size,
       uploadedAt: now,
       storagePath,
       isCurrent: true,
+      note,
     }
 
     const nextProject: Project = {

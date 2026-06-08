@@ -3,6 +3,7 @@ import { apiFetch } from '@/lib/http'
 
 export type CurrentRelease = {
   id: string
+  versionLabel?: string
   fileName: string
   size: number
   uploadedAt: string
@@ -20,10 +21,12 @@ export type ProjectSummary = {
 export type ReleaseSummary = {
   id: string
   version: number
+  versionLabel: string
   fileName: string
   size: number
   uploadedAt: string
   isCurrent: boolean
+  note?: string
   downloadUrl: string
 }
 
@@ -54,11 +57,14 @@ export const useAdminStore = defineStore('admin', {
       })
       await this.refresh()
     },
-    async uploadHtml(file: File, projectName?: string) {
+    async uploadHtml(file: File, projectName?: string, releaseNote?: string) {
       const form = new FormData()
       form.append('file', file)
       if (projectName && projectName.trim().length > 0) {
         form.append('projectName', projectName.trim())
+      }
+      if (releaseNote && releaseNote.trim().length > 0) {
+        form.append('releaseNote', releaseNote.trim())
       }
       const res = await fetch('/api/releases/upload', {
         method: 'POST',

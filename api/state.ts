@@ -14,11 +14,13 @@ function normalizeFileName(name: string): string {
 export type Release = {
   id: string
   version: number
+  versionLabel: string
   fileName: string
   size: number
   uploadedAt: string
   storagePath: string
   isCurrent: boolean
+  note?: string
 }
 
 export type Project = {
@@ -46,6 +48,26 @@ const DEFAULT_STATE: AppState = {
   preview: { enabled: false },
 }
 
+function formatDateLabel(date: Date): string {
+  const y = String(date.getFullYear())
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}.${m}.${d}`
+}
+
+function buildVersionLabel(dateLabel: string, seq: number): string {
+  const padded = String(seq).padStart(2, '0')
+  return `${dateLabel}-${padded}`
+}
+
+function parseVersionLabel(label: string): { date: string; seq: number } | null {
+  const m = /^(\d{4}\.\d{2}\.\d{2})-(\d{2,})$/.exec(label)
+  if (!m) return null
+  const seq = Number(m[2])
+  if (!Number.isFinite(seq) || seq <= 0) return null
+  return { date: m[1], seq }
+}
+
 export async function loadState(): Promise<AppState> {
   const stateFilePath = getStateFilePath()
   try {
@@ -60,13 +82,15 @@ export async function loadState(): Promise<AppState> {
     if (Array.isArray((parsed as AppState).projects)) {
       let migrated = false
       const projects = (parsed as AppState).projects.map((p) => {
-        const releases = Array.isArray(p.releases)
-          ? p.releases.map((r) => ({
-              ...r,
-              fileName: normalizeFileName(r.fileName),
-              version: typeof (r as Release).version === 'number' ? (r as Release).version : 0,
-            }))
-          : []
+        const releasesRaw = Array.isArray(p.releases) ? p.releases : []
+        const releases = releasesRaw.map((r) => ({
+          ...r,
+          fileName: normalizeFileName(r.fileName),
+          version: typeof (r as Release).version === 'number' ? (r as Release).version : 0,
+          versionLabel:
+            typeof (r as Release).versionLabel === 'string' ? (r as Release).versionLabel : '',
+          note: typeof (r as Release).note === 'string' ? (r as Release).note : undefined,
+        }))
 
         let nextVersion = typeof (p as Project).nextVersion === 'number' ? (p as Project).nextVersion : 1
         if (!Number.isFinite(nextVersion) || nextVersion <= 0) nextVersion = 1
@@ -85,6 +109,22 @@ export async function loadState(): Promise<AppState> {
           const max = releases.reduce((acc, r) => Math.max(acc, r.version || 0), 0)
           nextVersion = Math.max(nextVersion, max + 1)
           if (typeof (p as Project).nextVersion !== 'number') migrated = true
+        }
+
+        if (releases.some((r) => !r.versionLabel || r.versionLabel.length === 0)) {
+          const sorted = releases
+            .slice()
+            .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt))
+          const seqByDate = new Map<string, number>()
+          sorted.forEach((r) => {
+            const dateLabel = formatDateLabel(new Date(r.uploadedAt))
+            const nextSeq = (seqByDate.get(dateLabel) || 0) + 1
+            seqByDate.set(dateLabel, nextSeq)
+            if (!r.versionLabel || r.versionLabel.length === 0) {
+              r.versionLabel = buildVersionLabel(dateLabel, nextSeq)
+            }
+          })
+          migrated = true
         }
 
         if (typeof (p as Project).nextVersion !== 'number') migrated = true
@@ -113,7 +153,20 @@ export async function loadState(): Promise<AppState> {
       const migrated = withCurrent
         .slice()
         .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt))
-        .map((r, i) => ({ ...r, version: i + 1 }))
+        .map((r, i) => {
+          const dateLabel = formatDateLabel(new Date(r.uploadedAt))
+          return { ...r, version: i + 1, versionLabel: buildVersionLabel(dateLabel, 1) }
+        })
+        .map((r) => ({ ...r, fileName: normalizeFileName(r.fileName) }))
+
+      const seqByDate = new Map<string, number>()
+      migrated.forEach((r) => {
+        const parsedLabel = parseVersionLabel(r.versionLabel)
+        const dateLabel = parsedLabel?.date || formatDateLabel(new Date(r.uploadedAt))
+        const nextSeq = (seqByDate.get(dateLabel) || 0) + 1
+        seqByDate.set(dateLabel, nextSeq)
+        r.versionLabel = buildVersionLabel(dateLabel, nextSeq)
+      })
       const now = new Date().toISOString()
       const migratedState: AppState = {
         projects: [

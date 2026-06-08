@@ -24,6 +24,7 @@ const error = ref<string | null>(null)
 const accessCode = ref('')
 const selectedProjectId = ref<string>('')
 const newProjectName = ref('')
+const releaseNote = ref('')
 
 const origin = window.location.origin
 
@@ -47,7 +48,7 @@ const releasesDrawerOpen = ref(false)
 const releasesLoading = ref(false)
 const releasesError = ref<string | null>(null)
 const projectReleases = ref<
-  { id: string; version: number; fileName: string; size: number; uploadedAt: string; isCurrent: boolean; downloadUrl: string }[]
+  { id: string; version: number; versionLabel: string; fileName: string; size: number; uploadedAt: string; isCurrent: boolean; note?: string; downloadUrl: string }[]
 >([])
 
 function formatBytes(bytes: number) {
@@ -94,11 +95,12 @@ async function upload(file: File) {
       newProjectName.value.trim().length > 0
         ? newProjectName.value.trim()
         : selectedProject.value?.name || '默认项目'
-    const result = await admin.uploadHtml(file, projectName)
+    const result = await admin.uploadHtml(file, projectName, releaseNote.value)
     if (result.project?.id) {
       selectedProjectId.value = result.project.id
     }
     newProjectName.value = ''
+    releaseNote.value = ''
     message.value = '上传成功，已发布为当前预览版本'
   } catch (e) {
     error.value = e instanceof Error ? e.message : '上传失败'
@@ -291,6 +293,13 @@ onMounted(async () => {
               class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               placeholder="输入新项目名（留空则上传到当前选择项目）"
             />
+            <div class="text-xs text-slate-500">版本备注/更新说明（可选）</div>
+            <textarea
+              v-model="releaseNote"
+              class="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              rows="3"
+              placeholder="例如：修复登录页、增加项目列表、优化样式"
+            />
             <div class="text-xs text-slate-500">当前选择</div>
             <select
               v-model="selectedProjectId"
@@ -309,6 +318,9 @@ onMounted(async () => {
           <div v-else-if="!selectedRelease" class="text-sm text-slate-600">暂无已发布 HTML</div>
           <div v-else class="space-y-2">
             <div class="text-sm text-slate-900">{{ selectedRelease.fileName }}</div>
+            <div v-if="selectedRelease.versionLabel" class="text-xs text-slate-500">
+              版本：{{ selectedRelease.versionLabel }}
+            </div>
             <div class="text-xs text-slate-500">
               {{ formatBytes(selectedRelease.size) }} · {{ new Date(selectedRelease.uploadedAt).toLocaleString() }}
             </div>
@@ -498,7 +510,7 @@ onMounted(async () => {
             </div>
             <div v-for="r in projectReleases" :key="r.id" class="grid grid-cols-12 items-center px-3 py-2 text-sm">
               <div class="col-span-2 font-medium text-slate-900">
-                v{{ r.version }}
+                {{ r.versionLabel }}
               </div>
               <div class="col-span-6 truncate text-slate-700">
                 {{ r.fileName }}
@@ -511,6 +523,9 @@ onMounted(async () => {
               </div>
               <div class="col-span-12 mt-1 text-xs text-slate-500">
                 {{ new Date(r.uploadedAt).toLocaleString() }} · {{ formatBytes(r.size) }}
+              </div>
+              <div v-if="r.note" class="col-span-12 mt-1 text-xs text-slate-600">
+                备注：{{ r.note }}
               </div>
             </div>
           </div>
