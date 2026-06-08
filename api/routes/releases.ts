@@ -4,7 +4,7 @@ import crypto from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
 import { requireAdmin } from '../middleware/auth.js'
-import { getMaxUploadBytes, getUploadsDir } from '../config.js'
+import { getMaxReleasesPerProject, getMaxUploadBytes, getUploadsDir } from '../config.js'
 import { ensureDir } from '../utils/fs.js'
 import {
   getCurrentRelease,
@@ -75,17 +75,9 @@ router.post(
     await fs.writeFile(storagePath, file.buffer)
 
     const now = new Date().toISOString()
-    const nextRelease: Release = {
-      id,
-      fileName: path.basename(decodedOriginalName),
-      size: file.size,
-      uploadedAt: now,
-      storagePath,
-      isCurrent: true,
-    }
-
     const state = await loadState()
     const existing = state.projects.find((p) => p.name === incomingProjectName)
+    const maxReleases = getMaxReleasesPerProject()
 
     const project: Project = existing
       ? {
@@ -97,19 +89,32 @@ router.post(
           name: incomingProjectName,
           createdAt: now,
           updatedAt: now,
+          nextVersion: 1,
           releases: [],
         }
+
+    const version = Number.isFinite(project.nextVersion) && project.nextVersion > 0 ? project.nextVersion : 1
+    const nextRelease: Release = {
+      id,
+      version,
+      fileName: path.basename(decodedOriginalName),
+      size: file.size,
+      uploadedAt: now,
+      storagePath,
+      isCurrent: true,
+    }
 
     const nextProject: Project = {
       ...project,
       updatedAt: now,
+      nextVersion: version + 1,
       releases: [
         { ...nextRelease, isCurrent: true },
         ...project.releases.map((r) => ({ ...r, isCurrent: false })),
-      ].slice(0, 20),
+      ].slice(0, maxReleases),
     }
 
-    const toRemove = project.releases.slice(19)
+    const toRemove = project.releases.slice(Math.max(0, maxReleases - 1))
     const nextProjects = state.projects
       .filter((p) => p.id !== project.id)
       .concat(nextProject)

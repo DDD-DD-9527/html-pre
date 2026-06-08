@@ -38,6 +38,13 @@ export function getMaxUploadBytes(): number {
   return parsed
 }
 
+export function getMaxReleasesPerProject(): number {
+  const raw = process.env.MAX_RELEASES_PER_PROJECT
+  const parsed = raw ? Number(raw) : 20
+  if (!Number.isFinite(parsed) || parsed <= 0) return 20
+  return Math.floor(parsed)
+}
+
 export function getSessionSecret(): string {
   const secret = process.env.SESSION_SECRET
   if (!secret) throw new Error('SESSION_SECRET is required')

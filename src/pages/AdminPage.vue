@@ -43,6 +43,13 @@ const downloadUrl = computed(() =>
 const renamingProjectId = ref<string | null>(null)
 const renamingProjectName = ref('')
 
+const releasesDrawerOpen = ref(false)
+const releasesLoading = ref(false)
+const releasesError = ref<string | null>(null)
+const projectReleases = ref<
+  { id: string; version: number; fileName: string; size: number; uploadedAt: string; isCurrent: boolean; downloadUrl: string }[]
+>([])
+
 function formatBytes(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB']
   let value = bytes
@@ -108,6 +115,25 @@ async function copyPreviewLink() {
 
 async function openPreview() {
   window.open(previewUrl.value, '_blank', 'noopener,noreferrer')
+}
+
+async function openReleases() {
+  if (!selectedProject.value?.id) return
+  releasesDrawerOpen.value = true
+  releasesLoading.value = true
+  releasesError.value = null
+  try {
+    const res = await admin.getProjectReleases(selectedProject.value.id)
+    projectReleases.value = res.releases || []
+  } catch (e) {
+    releasesError.value = e instanceof Error ? e.message : '加载失败'
+  } finally {
+    releasesLoading.value = false
+  }
+}
+
+function closeReleases() {
+  releasesDrawerOpen.value = false
 }
 
 function startRename(projectId: string, currentName: string) {
@@ -314,6 +340,14 @@ onMounted(async () => {
                 <ExternalLink class="h-4 w-4" />
                 下载 HTML
               </a>
+              <button
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                :disabled="busy || !selectedProject?.id"
+                @click="openReleases"
+              >
+                <ExternalLink class="h-4 w-4" />
+                查看版本
+              </button>
             </div>
 
             <div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
@@ -432,6 +466,55 @@ onMounted(async () => {
       </div>
       <div v-if="error" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
         {{ error }}
+      </div>
+    </div>
+
+    <div v-if="releasesDrawerOpen" class="fixed inset-0 z-50">
+      <div class="absolute inset-0 bg-slate-900/40" @click="closeReleases"></div>
+      <div class="absolute right-0 top-0 h-full w-full max-w-xl overflow-auto bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <div class="text-sm text-slate-600">版本列表</div>
+            <div class="mt-1 text-lg font-semibold text-slate-900">
+              {{ selectedProject?.name || '项目' }}
+            </div>
+          </div>
+          <button class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" @click="closeReleases">
+            关闭
+          </button>
+        </div>
+
+        <div class="px-6 py-4">
+          <div v-if="releasesLoading" class="text-sm text-slate-600">加载中…</div>
+          <div v-else-if="releasesError" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {{ releasesError }}
+          </div>
+          <div v-else-if="projectReleases.length === 0" class="text-sm text-slate-600">暂无版本</div>
+          <div v-else class="overflow-hidden rounded-xl border border-slate-200">
+            <div class="grid grid-cols-12 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              <div class="col-span-2">版本</div>
+              <div class="col-span-6">文件</div>
+              <div class="col-span-4 text-right">操作</div>
+            </div>
+            <div v-for="r in projectReleases" :key="r.id" class="grid grid-cols-12 items-center px-3 py-2 text-sm">
+              <div class="col-span-2 font-medium text-slate-900">
+                v{{ r.version }}
+              </div>
+              <div class="col-span-6 truncate text-slate-700">
+                {{ r.fileName }}
+                <span v-if="r.isCurrent" class="ml-2 inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-xs text-blue-700">当前</span>
+              </div>
+              <div class="col-span-4 flex justify-end">
+                <a class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50" :href="r.downloadUrl" target="_blank" rel="noopener">
+                  下载
+                </a>
+              </div>
+              <div class="col-span-12 mt-1 text-xs text-slate-500">
+                {{ new Date(r.uploadedAt).toLocaleString() }} · {{ formatBytes(r.size) }}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

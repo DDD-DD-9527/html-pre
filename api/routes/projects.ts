@@ -50,6 +50,64 @@ router.get('/:projectId/download', requireAdmin, async (req: Request, res: Respo
   res.status(200).sendFile(current.storagePath)
 })
 
+router.get(
+  '/:projectId/releases',
+  requireAdmin,
+  async (req: Request, res: Response): Promise<void> => {
+    const state = await loadState()
+    const project = findProjectById(state, req.params.projectId)
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' })
+      return
+    }
+
+    const releases = project.releases
+      .slice()
+      .sort((a, b) => (b.version ?? 0) - (a.version ?? 0))
+      .map((r) => ({
+        id: r.id,
+        version: r.version,
+        fileName: r.fileName,
+        size: r.size,
+        uploadedAt: r.uploadedAt,
+        isCurrent: r.isCurrent,
+        downloadUrl: `/api/projects/${project.id}/releases/${r.id}/download`,
+      }))
+
+    res.status(200).json({
+      success: true,
+      project: { id: project.id, name: project.name },
+      releases,
+    })
+  },
+)
+
+router.get(
+  '/:projectId/releases/:releaseId/download',
+  requireAdmin,
+  async (req: Request, res: Response): Promise<void> => {
+    const state = await loadState()
+    const project = findProjectById(state, req.params.projectId)
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' })
+      return
+    }
+
+    const release = project.releases.find((r) => r.id === req.params.releaseId)
+    if (!release) {
+      res.status(404).json({ success: false, error: 'Release not found' })
+      return
+    }
+
+    const safeName = release.fileName.replace(/\.(html|htm)$/i, '')
+    const filename = `${safeName}-v${release.version}.html`
+    const encoded = encodeURIComponent(filename)
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encoded}`)
+    res.type('html')
+    res.status(200).sendFile(release.storagePath)
+  },
+)
+
 router.put('/:projectId', requireAdmin, async (req: Request, res: Response): Promise<void> => {
   const rawName = req.body?.name
   const name = typeof rawName === 'string' ? rawName.trim() : ''

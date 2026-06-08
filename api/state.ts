@@ -13,6 +13,7 @@ function normalizeFileName(name: string): string {
 
 export type Release = {
   id: string
+  version: number
   fileName: string
   size: number
   uploadedAt: string
@@ -25,6 +26,7 @@ export type Project = {
   name: string
   createdAt: string
   updatedAt: string
+  nextVersion: number
   releases: Release[]
 }
 
@@ -56,24 +58,62 @@ export async function loadState(): Promise<AppState> {
         : { enabled: false }
 
     if (Array.isArray((parsed as AppState).projects)) {
-      const projects = (parsed as AppState).projects.map((p) => ({
-        ...p,
-        releases: Array.isArray(p.releases)
-          ? p.releases.map((r) => ({ ...r, fileName: normalizeFileName(r.fileName) }))
-          : [],
-      }))
-      return {
-        projects,
-        preview,
+      let migrated = false
+      const projects = (parsed as AppState).projects.map((p) => {
+        const releases = Array.isArray(p.releases)
+          ? p.releases.map((r) => ({
+              ...r,
+              fileName: normalizeFileName(r.fileName),
+              version: typeof (r as Release).version === 'number' ? (r as Release).version : 0,
+            }))
+          : []
+
+        let nextVersion = typeof (p as Project).nextVersion === 'number' ? (p as Project).nextVersion : 1
+        if (!Number.isFinite(nextVersion) || nextVersion <= 0) nextVersion = 1
+
+        if (releases.some((r) => r.version === 0)) {
+          const sorted = releases
+            .slice()
+            .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt))
+          sorted.forEach((r, i) => {
+            if (!r.version || r.version <= 0) r.version = i + 1
+          })
+          const max = sorted.reduce((acc, r) => Math.max(acc, r.version || 0), 0)
+          nextVersion = Math.max(nextVersion, max + 1)
+          migrated = true
+        } else {
+          const max = releases.reduce((acc, r) => Math.max(acc, r.version || 0), 0)
+          nextVersion = Math.max(nextVersion, max + 1)
+          if (typeof (p as Project).nextVersion !== 'number') migrated = true
+        }
+
+        if (typeof (p as Project).nextVersion !== 'number') migrated = true
+
+        return {
+          ...p,
+          nextVersion,
+          releases,
+        }
+      })
+
+      const state = { projects, preview }
+      if (migrated) {
+        await saveState(state)
       }
+
+      return state
     }
 
     const legacyReleases = Array.isArray(parsed.releases) ? parsed.releases : []
     if (legacyReleases.length > 0) {
       const hasCurrent = legacyReleases.some((r) => r.isCurrent)
-      const migrated = hasCurrent
+      const withCurrent = hasCurrent
         ? legacyReleases
         : legacyReleases.map((r, i) => ({ ...r, isCurrent: i === 0 }))
+      const migrated = withCurrent
+        .slice()
+        .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt))
+        .map((r, i) => ({ ...r, version: i + 1 }))
       const now = new Date().toISOString()
       const migratedState: AppState = {
         projects: [
@@ -82,6 +122,7 @@ export async function loadState(): Promise<AppState> {
             name: '默认项目',
             createdAt: now,
             updatedAt: now,
+            nextVersion: Math.max(1, migrated.length + 1),
             releases: migrated,
           },
         ],

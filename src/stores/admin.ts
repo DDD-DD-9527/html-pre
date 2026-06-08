@@ -17,6 +17,16 @@ export type ProjectSummary = {
   previewUrl: string
 }
 
+export type ReleaseSummary = {
+  id: string
+  version: number
+  fileName: string
+  size: number
+  uploadedAt: string
+  isCurrent: boolean
+  downloadUrl: string
+}
+
 export const useAdminStore = defineStore('admin', {
   state: () => ({
     projects: [] as ProjectSummary[],
@@ -77,6 +87,15 @@ export const useAdminStore = defineStore('admin', {
       )
       if (!res.success) throw new Error('Rename failed')
       await this.refresh()
+      return res
+    },
+
+    async getProjectReleases(projectId: string) {
+      const res = await apiFetch<{
+        success: boolean
+        project: { id: string; name: string }
+        releases: ReleaseSummary[]
+      }>(`/api/projects/${projectId}/releases`)
       return res
     },
   },
